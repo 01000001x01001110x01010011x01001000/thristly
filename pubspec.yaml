@@ -1,0 +1,26 @@
+name: thristify
+description: Exact-timing notification scheduler
+publish_to: "none"
+version: 0.0.1
+
+environment:
+  sdk: ">=2.18.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/thristly_logo.png"
+  adaptive_icon_background: "#FFFFFF"   # or your brand color
+  adaptive_icon_foreground: "assets/thristly_logo.png"
+
+flutter:
+  uses-material-design: true

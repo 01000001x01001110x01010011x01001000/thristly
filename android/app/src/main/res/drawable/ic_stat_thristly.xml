@@ -1,0 +1,18 @@
+<!-- android/app/src/main/res/drawable/ic_stat_thristly.xml -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Outer droplet shape -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,2 C9.2,7 6,9.8 6,13.2 C6,17.4 8.9,20 12,20 C15.1,20 18,17.4 18,13.2 C18,9.8 14.8,7 12,2 Z"/>
+
+    <!-- Inner reflection detail (optional) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.6"
+        android:pathData="M10.5,9.5 C10.5,9.1 10.9,8.8 11.2,9 C12,9.7 13.3,11.3 13.3,13 C13.3,14.7 12.3,15.8 11.1,15.9 C10.7,15.9 10.3,15.5 10.3,15.1 C10.3,12.8 10.5,10.6 10.5,9.5 Z"/>
+</vector>
