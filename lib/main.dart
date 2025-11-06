@@ -1,3 +1,8 @@
+// Simple Flutter app to schedule periodic hydration reminders.
+// Communicates with platform code via a MethodChannel for scheduling,
+// permissions, and status. UI allows configuring title, body, interval,
+// and daily start/end window.
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -8,6 +13,7 @@ void main() {
 
 class ThristifyApp extends StatelessWidget {
   const ThristifyApp({super.key});
+
   @override
   Widget build(BuildContext context) => MaterialApp(
         title: 'thristify',
@@ -23,24 +29,34 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  // MethodChannel used to call platform-specific implementations
+  // (Android/iOS) for scheduling/cancelling exact notifications and
+  // requesting permissions.
   static const _channel = MethodChannel('thristify/native_exact');
 
+  // Controllers for the editable fields in the UI.
   final _title = TextEditingController(text: 'Thristify Reminder');
   final _body = TextEditingController(text: 'Time to hydrate! 💧');
   final _interval = TextEditingController(text: '15');
 
+  // Daily window start and end times for scheduling reminders.
   TimeOfDay _start = const TimeOfDay(hour: 9, minute: 0);
   TimeOfDay _end = const TimeOfDay(hour: 18, minute: 0);
 
+  // Whether the schedule is currently active (as reported by platform).
   bool _scheduled = false;
 
   @override
   void initState() {
     super.initState();
+    // Request any platform permissions we might need and synchronize UI state
+    // with platform scheduling status.
     _initPlatformPermissions();
     _syncStatus();
   }
 
+  // Ask the platform to request post-notification permission (iOS/Android 13+)
+  // and to request ignoring battery optimizations on Android if needed.
   Future<void> _initPlatformPermissions() async {
     try {
       await _channel.invokeMethod('requestPostNotificationsIfNeeded');
@@ -50,6 +66,8 @@ class _HomePageState extends State<HomePage> {
     } catch (_) {}
   }
 
+  // Query the platform for current scheduling status and saved configuration.
+  // Updates controllers and state accordingly.
   Future<void> _syncStatus() async {
     try {
       final res = await _channel.invokeMethod('getStatus') as Map?;
@@ -73,16 +91,20 @@ class _HomePageState extends State<HomePage> {
     } catch (_) {}
   }
 
+  // Show a time picker and update the start time if the user picks one.
   Future<void> _pickStart() async {
     final picked = await showTimePicker(context: context, initialTime: _start);
     if (picked != null) setState(() => _start = picked);
   }
 
+  // Show a time picker and update the end time if the user picks one.
   Future<void> _pickEnd() async {
     final picked = await showTimePicker(context: context, initialTime: _end);
     if (picked != null) setState(() => _end = picked);
   }
 
+  // Start scheduling reminders using the platform channel. Sends current
+  // title/body/interval and daily window to the native side.
   Future<void> _startSchedule() async {
     final minutes = int.tryParse(_interval.text) ?? 15;
     try {
@@ -95,6 +117,7 @@ class _HomePageState extends State<HomePage> {
         'endHour': _end.hour,
         'endMinute': _end.minute,
       });
+      // Expecting the native side to return 'scheduled' on success.
       setState(() => _scheduled = res == 'scheduled');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -110,6 +133,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  // Cancel any scheduled reminders on the native side and update UI state.
   Future<void> _stopSchedule() async {
     await _channel.invokeMethod('cancelExact');
     setState(() => _scheduled = false);
@@ -120,6 +144,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    // Dispose controllers to free resources.
     _title.dispose();
     _body.dispose();
     _interval.dispose();
@@ -128,6 +153,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    // Start/Stop button toggles scheduling based on current state.
     final btn = FilledButton(
       onPressed: _scheduled ? _stopSchedule : _startSchedule,
       child: Text(_scheduled ? 'Stop' : 'Start'),
@@ -138,10 +164,12 @@ class _HomePageState extends State<HomePage> {
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(children: [
+          // Editable fields for notification title and body.
           TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title')),
           const SizedBox(height: 8),
           TextField(controller: _body, decoration: const InputDecoration(labelText: 'Body')),
           const SizedBox(height: 8),
+          // Interval input and start/stop button.
           Row(children: [
             Expanded(
               child: TextField(
@@ -156,6 +184,7 @@ class _HomePageState extends State<HomePage> {
             btn,
           ]),
           const SizedBox(height: 12),
+          // Time pickers for daily start and end window.
           Row(
             children: [
               Expanded(
@@ -178,6 +207,7 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
           const SizedBox(height: 12),
+          // Status display with color indicating running/stopped.
           Text(
             _scheduled ? 'Status: Running in daily window' : 'Status: Stopped',
             style: TextStyle(
@@ -186,6 +216,7 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           const SizedBox(height: 8),
+          // Short explanation of platform behavior.
           const Text(
             'Android: exact via AlarmManager (foreground, background, or terminated). '
             'iOS: scheduled within daily window while respecting OS limits.',
