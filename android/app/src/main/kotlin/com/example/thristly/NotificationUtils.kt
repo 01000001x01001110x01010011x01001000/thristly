@@ -11,7 +11,6 @@ import android.content.Context
 import android.os.Build
 // import for NotificationCompat helper
 import androidx.core.app.NotificationCompat
-import com.example.thristify.R
 
 // singleton object to hold notification helper functions
 object NotificationUtils {

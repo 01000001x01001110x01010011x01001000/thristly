@@ -12,20 +12,12 @@ class TaskPlannerPage extends StatefulWidget {
 }
 
 class _TaskPlannerPageState extends State<TaskPlannerPage> with WidgetsBindingObserver {
-  static const _prefsKey = 'weekly_tasks_v2'; // bumped version
+  static const _prefsKey = 'weekly_tasks_v2';
   late SharedPreferences _prefs;
 
-
-  // Task model: id and text.
-  // We store List<Map<String, String>> as JSON: [{'id': '123', 'text': 'Drink water'}]
   List<Map<String, String>> _tasks = [];
-
-  // Completed task ids for the current week.
   Set<String> _completedIds = {};
-
-  // The week id for which _completedIds is valid, e.g. "2025-W46"
   String? _completedWeekId;
-
   bool _loading = true;
 
   @override
@@ -41,12 +33,9 @@ class _TaskPlannerPageState extends State<TaskPlannerPage> with WidgetsBindingOb
     super.dispose();
   }
 
-  // compute current ISO week id like "2025-W46"
   String _currentWeekId([DateTime? date]) {
-    final dt = date ?? DateTime.now().toUtc();
-    // ISO week date algorithm
-    // Thursday-based week: week 1 is the week with Jan 4th.
-    final thursday = dt.add(Duration(days: (4 - dt.weekday)));
+    final dt = (date ?? DateTime.now()).toUtc();
+    final thursday = dt.add(Duration(days: (4 - (dt.weekday))));
     final weekYear = thursday.year;
     final firstJan = DateTime.utc(weekYear, 1, 1);
     final daysBetween = thursday.difference(firstJan).inDays;
@@ -77,7 +66,6 @@ class _TaskPlannerPageState extends State<TaskPlannerPage> with WidgetsBindingOb
       _createEmptyState();
     }
 
-    // If saved week differs from current week, clear completions (start fresh week).
     final nowWeek = _currentWeekId();
     if (_completedWeekId != nowWeek) {
       _completedWeekId = nowWeek;
@@ -85,7 +73,7 @@ class _TaskPlannerPageState extends State<TaskPlannerPage> with WidgetsBindingOb
       await _saveState();
     }
 
-    setState(() => _loading = false);
+    if (mounted) setState(() => _loading = false);
   }
 
   void _createEmptyState() {
@@ -103,55 +91,64 @@ class _TaskPlannerPageState extends State<TaskPlannerPage> with WidgetsBindingOb
     await _prefs.setString(_prefsKey, jsonEncode(payload));
   }
 
-  Future<void> _addTask() async {
-    final controller = TextEditingController();
-    final res = await showDialog<String?>(
+  Future<void> _showAddEditSheet({int? editIndex}) async {
+    final isEdit = editIndex != null;
+    final controller = TextEditingController(text: isEdit ? _tasks[editIndex]['text'] : '');
+    await showModalBottomSheet<String?>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add weekly task'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'Task description'),
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Row(
+                children: [
+                  Text(isEdit ? 'Edit task' : 'Add weekly task', style: Theme.of(context).textTheme.titleMedium),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Close',
+                  )
+                ],
+              ),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(hintText: 'Task description'),
+                onSubmitted: (_) => Navigator.of(ctx).pop(controller.text.trim()),
+              ),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(
+                  child: FilledButton(
+                      onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+                      child: Text(isEdit ? 'Save' : 'Add')),
+                ),
+              ]),
+              const SizedBox(height: 8),
+            ]),
+          ),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(controller.text.trim()), child: const Text('Add')),
-        ],
       ),
-    );
-
-    if (res != null && res.isNotEmpty) {
-      final id = DateTime.now().microsecondsSinceEpoch.toString();
-      setState(() => _tasks.add({'id': id, 'text': res}));
-      await _saveState();
-    }
+    ).then((res) async {
+      if (res != null && res.isNotEmpty) {
+        if (isEdit) {
+          setState(() => _tasks[editIndex!]['text'] = res);
+        } else {
+          final id = DateTime.now().microsecondsSinceEpoch.toString();
+          setState(() => _tasks.add({'id': id, 'text': res}));
+        }
+        await _saveState();
+      }
+    });
   }
 
-  Future<void> _editTask(int index) async {
-    final task = _tasks[index];
-    final controller = TextEditingController(text: task['text']);
-    final res = await showDialog<String?>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit task'),
-        content: TextField(controller: controller, autofocus: true),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(controller.text.trim()), child: const Text('Save')),
-        ],
-      ),
-    );
-
-    if (res != null && res.isNotEmpty) {
-      setState(() => _tasks[index]['text'] = res);
-      await _saveState();
-    }
-  }
-
-  Future<void> _removeTask(int index) async {
+  Future<void> _removeTaskAt(int index) async {
     final removed = _tasks.removeAt(index);
-    // also remove completion if present
     _completedIds.remove(removed['id']);
     await _saveState();
 
@@ -181,7 +178,6 @@ class _TaskPlannerPageState extends State<TaskPlannerPage> with WidgetsBindingOb
     await _saveState();
   }
 
-  // Manually reset completions for the current week (keeps tasks)
   Future<void> _resetWeek() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -201,7 +197,6 @@ class _TaskPlannerPageState extends State<TaskPlannerPage> with WidgetsBindingOb
     }
   }
 
-  // Called when app lifecycle changes; useful to detect week rollovers while app is in background.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
@@ -210,7 +205,6 @@ class _TaskPlannerPageState extends State<TaskPlannerPage> with WidgetsBindingOb
     super.didChangeAppLifecycleState(state);
   }
 
-  // If week changed while the app wasn't active, reset completions automatically.
   Future<void> _checkWeekRollover() async {
     final nowWeek = _currentWeekId();
     if (_completedWeekId != nowWeek) {
@@ -230,30 +224,19 @@ class _TaskPlannerPageState extends State<TaskPlannerPage> with WidgetsBindingOb
   Widget build(BuildContext context) {
     final total = _tasks.length;
     final done = _completedIds.length;
-    final progress = total == 0 ? 0.0 : done / total;
+    final progress = total == 0 ? 0.0 : (done / total);
 
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Weekly Tasks (recurring)'),
-            const SizedBox(height: 2),
-            Text(
-              _completedWeekId ?? _currentWeekId(),
-              style: Theme.of(context).textTheme.labelSmall,
-            ),
-          ],
-        ),
+        title: Text('Weekly Tasks (recurring)'),
+        centerTitle: false,
         actions: [
           IconButton(
+            onPressed: _resetWeek,
             icon: const Icon(Icons.refresh),
             tooltip: 'Reset completions for this week',
-            onPressed: _resetWeek,
           ),
           IconButton(
-            icon: const Icon(Icons.delete_forever),
-            tooltip: 'Clear all tasks',
             onPressed: () async {
               final confirmed = await showDialog<bool>(
                 context: context,
@@ -274,21 +257,36 @@ class _TaskPlannerPageState extends State<TaskPlannerPage> with WidgetsBindingOb
                 await _saveState();
               }
             },
+            icon: const Icon(Icons.delete_forever),
+            tooltip: 'Clear all tasks',
           ),
+          const SizedBox(width: 8),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(28),
+          preferredSize: const Size.fromHeight(44),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6),
-            child: Row(
-              children: [
-                Expanded(
-                  child: LinearProgressIndicator(value: progress),
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
+            child: Row(children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(value: progress, minHeight: 8),
                 ),
-                const SizedBox(width: 12),
-                Text('${(progress * 100).round()}%'),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(_completedWeekId ?? _currentWeekId(), style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: 2),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text('${(progress * 100).round()}% • $done/$total', style: Theme.of(context).textTheme.bodySmall),
+                ),
+              ])
+            ]),
           ),
         ),
       ),
@@ -296,18 +294,13 @@ class _TaskPlannerPageState extends State<TaskPlannerPage> with WidgetsBindingOb
           ? const Center(child: CircularProgressIndicator())
           : _tasks.isEmpty
               ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('No weekly tasks yet.'),
-                      const SizedBox(height: 12),
-                      FilledButton.icon(
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add task'),
-                        onPressed: _addTask,
-                      ),
-                    ],
-                  ),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.checklist_rtl, size: 56, color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(height: 12),
+                    const Text('No weekly tasks yet.'),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(icon: const Icon(Icons.add), label: const Text('Add task'), onPressed: () => _showAddEditSheet()),
+                  ]),
                 )
               : ListView.separated(
                   padding: const EdgeInsets.all(8),
@@ -319,30 +312,70 @@ class _TaskPlannerPageState extends State<TaskPlannerPage> with WidgetsBindingOb
                     final text = task['text'] ?? '';
                     final completed = _completedIds.contains(id);
 
-                    return Card(
-                      child: ListTile(
-                        leading: Checkbox(
-                          value: completed,
-                          onChanged: (v) => _toggleComplete(id, v ?? false),
+                    return Dismissible(
+                      key: ValueKey(id),
+                      background: Container(
+                        color: Colors.redAccent,
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 20),
+                        child: const Icon(Icons.delete, color: Colors.white),
+                      ),
+                      direction: DismissDirection.endToStart,
+                      confirmDismiss: (_) async {
+                        final res = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Delete task'),
+                            content: Text('Delete "$text"?'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+                              FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Delete')),
+                            ],
+                          ),
+                        );
+                        return res == true;
+                      },
+                      onDismissed: (_) => _removeTaskAt(i),
+                      child: Card(
+                        child: ListTile(
+                          visualDensity: VisualDensity.compact,
+                          leading: Checkbox(
+                            value: completed,
+                            onChanged: (v) => _toggleComplete(id, v ?? false),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          title: Text(
+                            text,
+                            style: TextStyle(decoration: completed ? TextDecoration.lineThrough : null, color: completed ? Colors.grey : null),
+                          ),
+                          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, size: 20),
+                              tooltip: 'Edit task',
+                              onPressed: () => _showAddEditSheet(editIndex: i),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, size: 20),
+                              tooltip: 'Delete task',
+                              onPressed: () async {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: const Text('Delete task'),
+                                    content: Text('Delete "$text"?'),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+                                      FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Delete')),
+                                    ],
+                                  ),
+                                );
+                                if (confirm == true) await _removeTaskAt(i);
+                              },
+                            ),
+                          ]),
+                          onTap: () => _toggleComplete(id, !completed),
                         ),
-                        title: Text(
-                          text,
-                          style: TextStyle(
-                            decoration: completed ? TextDecoration.lineThrough : null,
-                            color: completed ? Colors.grey : null,
-                          ),
-                        ),
-                        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                          IconButton(
-                            icon: const Icon(Icons.edit),
-                            onPressed: () => _editTask(i),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete),
-                            onPressed: () => _removeTask(i),
-                          ),
-                        ]),
-                        onTap: () => _toggleComplete(id, !completed),
                       ),
                     );
                   },
@@ -350,7 +383,7 @@ class _TaskPlannerPageState extends State<TaskPlannerPage> with WidgetsBindingOb
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.add),
         label: const Text('Add task'),
-        onPressed: _addTask,
+        onPressed: () => _showAddEditSheet(),
       ),
     );
   }

@@ -18,7 +18,7 @@ android {
     // Use the compile SDK version provided by the Flutter tooling.
     compileSdk = flutter.compileSdkVersion
     // NDK version used for native builds; typically provided by Flutter.
-    ndkVersion = flutter.ndkVersion       // OK to leave; no plugin needs a newer NDK now
+    ndkVersion = "27.0.12077973"       // OK to leave; no plugin needs a newer NDK now
 
     defaultConfig {
         // The application id shown on the Play Store / installed device.
